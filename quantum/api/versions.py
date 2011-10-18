@@ -32,11 +32,11 @@ class Versions(wsgi.Application):
         version_objs = [
             {
                 "id": "v1.0",
-                "status": "CURRENT",
+                "status": "DIABLO",
             },
             {
                 "id": "v1.1",
-                "status": "FUTURE",
+                "status": "ESSEX",
             },
         ]
 

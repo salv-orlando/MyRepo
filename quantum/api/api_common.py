@@ -19,65 +19,37 @@ import logging
 import webob
 
 from webob import exc
-
 from quantum.common import wsgi
 
 XML_NS_V01 = 'http://netstack.org/quantum/api/v0.1'
 XML_NS_V10 = 'http://netstack.org/quantum/api/v1.0'
+XML_NS_V11 = 'http://netstack.org/quantum/api/v1.1'
 LOG = logging.getLogger('quantum.api.api_common')
 
 
+class HeadersSerializer(wsgi.ResponseHeadersSerializer):
+    """ 
+    Defines default respone status codes for Quantum API operations
+        create - 202 ACCEPTED
+        update - 204 NOCONTENT
+        delete - 204 NOCONTENT
+        others - 200 OK (defined in base class)
+        
+    """ 
+
+    def create(self, response, data):
+        response.status_int = 202
+
+    def delete(self, response, data):
+        response.status_int = 204
+
+    def action(self, response, data):
+        response.status_int = 202
+        
+        
 class QuantumController(wsgi.Controller):
     """ Base controller class for Quantum API """
 
     def __init__(self, plugin):
         self._plugin = plugin
         super(QuantumController, self).__init__()
-
-    def _parse_request_params(self, req, params):
-        results = {}
-        data = {}
-        # Parameters are expected to be in request body only
-        if req.body:
-            des_body = self._deserialize(req.body,
-                                         req.best_match_content_type())
-            data = des_body and des_body.get(self._resource_name, None)
-            if not data:
-                msg = ("Failed to parse request. Resource: " +
-                       self._resource_name + " not found in request body")
-                for line in msg.split('\n'):
-                    LOG.error(line)
-                raise exc.HTTPBadRequest(msg)
-
-        for param in params:
-            param_name = param['param-name']
-            param_value = data.get(param_name, None)
-            # If the parameter wasn't found and it was required, return 400
-            if param_value is None and param['required']:
-                msg = ("Failed to parse request. " +
-                       "Parameter: " + param_name + " not specified")
-                for line in msg.split('\n'):
-                    LOG.error(line)
-                raise exc.HTTPBadRequest(msg)
-            results[param_name] = param_value or param.get('default-value')
-
-        return results
-
-    def _build_response(self, req, res_data, status_code=200):
-        """ A function which builds an HTTP response
-            given a status code and a dictionary containing
-            the response body to be serialized
-
-        """
-        content_type = req.best_match_content_type()
-        default_xmlns = self.get_default_xmlns(req)
-        body = self._serialize(res_data, content_type, default_xmlns)
-
-        response = webob.Response()
-        response.status = status_code
-        response.headers['Content-Type'] = content_type
-        response.body = body
-        msg_dict = dict(url=req.url, status=response.status_int)
-        msg = _("%(url)s returned with HTTP %(status)d") % msg_dict
-        LOG.debug(msg)
-        return response

@@ -21,16 +21,51 @@ from quantum.api import api_common as common
 from quantum.api import faults
 from quantum.api.views import networks as networks_view
 from quantum.common import exceptions as exception
+from quantum.common import wsgi
 
 LOG = logging.getLogger('quantum.api.networks')
 
 
+def create_resource(plugin, version):
+    controller = {
+        '1.0': ControllerV10,
+        '1.1': ControllerV11,
+    }[version]()
+
+    metadata = {
+        '1.0': ControllerV10._serialization_metadata,
+        '1.1': ControllerV11._serialization_metadata,
+    }
+
+    xmlns = {
+        '1.0': common.XML_NS_V10,
+        '1.1': common.XML_NS_V11,
+    }[version]
+
+    headers_serializer = common.HeadersSerializer()
+    xml_serializer = wsgi.XMLDictSerializer(metadata, xmlns)
+    json_serializer = wsgi.JSONDictSerializer()
+    xml_deserializer = wsgi.XMLDeserializer(metadata)
+    json_deserializer = wsgi.JSONDeserializer()
+
+    body_serializers = {
+        'application/xml': xml_serializer,
+        'application/json': json_serializer,
+    }
+
+    body_deserializers = {
+        'application/xml': xml_deserializer,
+        'application/json': json_deserializer,
+    }
+
+    serializer = wsgi.ResponseSerializer(body_serializers, headers_serializer)
+    deserializer = wsgi.RequestDeserializer(body_deserializers)
+
+    return wsgi.Resource(controller, deserializer, serializer)
+    
+
 class Controller(common.QuantumController):
     """ Network API controller for Quantum API """
-
-    _network_ops_param_list = [{
-        'param-name': 'name',
-        'required': True}, ]
 
     _serialization_metadata = {
         "application/xml": {
@@ -46,7 +81,7 @@ class Controller(common.QuantumController):
         self._resource_name = 'network'
         super(Controller, self).__init__(plugin)
 
-    def _item(self, req, tenant_id, network_id,
+    def _item(self, request, tenant_id, network_id,
               net_details=True, port_details=False):
         # We expect get_network_details to return information
         # concerning logical ports as well.
@@ -57,15 +92,15 @@ class Controller(common.QuantumController):
         ports_data = [self._plugin.get_port_details(
                                    tenant_id, network_id, port['port-id'])
                       for port in port_list]
-        builder = networks_view.get_view_builder(req)
+        builder = networks_view.get_view_builder(request, self.version)
         result = builder.build(network, net_details,
                                ports_data, port_details)['network']
         return dict(network=result)
 
-    def _items(self, req, tenant_id, net_details=False):
+    def _items(self, request, tenant_id, net_details=False):
         """ Returns a list of networks. """
         networks = self._plugin.get_all_networks(tenant_id)
-        builder = networks_view.get_view_builder(req)
+        builder = networks_view.get_view_builder(request, self.version)
         result = [builder.build(network, net_details)['network']
                   for network in networks]
         return dict(networks=result)
@@ -105,13 +140,10 @@ class Controller(common.QuantumController):
         network = self._plugin.\
                    create_network(tenant_id,
                                   request_params['name'])
-        builder = networks_view.get_view_builder(request)
+        builder = networks_view.get_view_builder(request, self.version)
         result = builder.build(network)['network']
-        # Wsgi middleware allows us to build the response
-        # before returning the call.
-        # This will allow us to return a 200 status code.  NOTE: in v1.1 we
-        # will be returning a 202 status code.
-        return self._build_response(request, dict(network=result), 200)
+        #TODO: must change this shit here
+        #return self._build_response(request, dict(network=result), 200)
 
     def update(self, request, tenant_id, id):
         """ Updates the name for the network with the given id """
@@ -137,3 +169,16 @@ class Controller(common.QuantumController):
             return faults.Fault(faults.NetworkNotFound(e))
         except exception.NetworkInUse as e:
             return faults.Fault(faults.NetworkInUse(e))
+
+
+class ControllerV10(Controller):
+    
+    def __init__(self, plugin):
+        self.version = "1.0"
+        super(ControllerV10, self).__init__(plugin)
+
+class ControllerV11(Controller):
+    
+    def __init__(self, plugin):
+        self.version = "1.1"
+        super(ControllerV11, self).__init__(plugin)

@@ -21,8 +21,20 @@ from quantum.api import api_common as common
 from quantum.api import faults
 from quantum.api.views import ports as ports_view
 from quantum.common import exceptions as exception
+from quantum.common import wsgi
 
 LOG = logging.getLogger('quantum.api.ports')
+
+
+def create_resource(plugin, version):
+    controller_dict = {
+                        '1.0': [ControllerV10(plugin),
+                               ControllerV10._serialization_metadata,
+                               common.XML_NS_V10],
+                        '1.1': [ControllerV11(plugin),
+                                ControllerV11._serialization_metadata,
+                                common.XML_NS_V11]}
+    return common.create_resource(version, controller_dict)    
 
 
 class Controller(common.QuantumController):
@@ -64,7 +76,7 @@ class Controller(common.QuantumController):
                       for port in port_list]
             return dict(ports=result)
         except exception.NetworkNotFound as e:
-            return faults.Fault(faults.NetworkNotFound(e))
+            return wsgi.Fault(faults.NetworkNotFound(e))
 
     def _item(self, request, tenant_id, network_id, port_id,
               att_details=False):
@@ -85,9 +97,9 @@ class Controller(common.QuantumController):
         try:
             return self._item(request, tenant_id, network_id, id)
         except exception.NetworkNotFound as e:
-            return faults.Fault(faults.NetworkNotFound(e))
+            return wsgi.Fault(faults.NetworkNotFound(e))
         except exception.PortNotFound as e:
-            return faults.Fault(faults.PortNotFound(e))
+            return wsgi.Fault(faults.PortNotFound(e))
 
     def detail(self, request, **kwargs):
         tenant_id = kwargs.get('tenant_id')
@@ -109,22 +121,18 @@ class Controller(common.QuantumController):
             request_params = \
                 self._parse_request_params(request, self._port_ops_param_list)
         except exc.HTTPError as e:
-            return faults.Fault(e)
+            return wsgi.Fault(e)
         try:
             port = self._plugin.create_port(tenant_id,
                                             network_id,
                                             request_params['state'])
             builder = ports_view.get_view_builder(request)
             result = builder.build(port)['port']
-            # Wsgi middleware allows us to build the response
-            # before returning the call.
-            # This will allow us to return a 200 status code.  NOTE: in v1.1
-            # we will be returning a 202 status code.
-            return self._build_response(request, dict(port=result), 200)
+            return dict(network=result)
         except exception.NetworkNotFound as e:
-            return faults.Fault(faults.NetworkNotFound(e))
+            return wsgi.Fault(faults.NetworkNotFound(e))
         except exception.StateInvalid as e:
-            return faults.Fault(faults.RequestedStateInvalid(e))
+            return wsgi.Fault(faults.RequestedStateInvalid(e))
 
     def update(self, request, tenant_id, network_id, id):
         """ Updates the state of a port for a given network """
@@ -133,17 +141,17 @@ class Controller(common.QuantumController):
             request_params = \
                 self._parse_request_params(request, self._port_ops_param_list)
         except exc.HTTPError as e:
-            return faults.Fault(e)
+            return wsgi.Fault(e)
         try:
             self._plugin.update_port(tenant_id, network_id, id,
                                      request_params['state'])
             return exc.HTTPNoContent()
         except exception.NetworkNotFound as e:
-            return faults.Fault(faults.NetworkNotFound(e))
+            return wsgi.Fault(faults.NetworkNotFound(e))
         except exception.PortNotFound as e:
-            return faults.Fault(faults.PortNotFound(e))
+            return wsgi.Fault(faults.PortNotFound(e))
         except exception.StateInvalid as e:
-            return faults.Fault(faults.RequestedStateInvalid(e))
+            return wsgi.Fault(faults.RequestedStateInvalid(e))
 
     def delete(self, request, tenant_id, network_id, id):
         """ Destroys the port with the given id """
@@ -152,8 +160,22 @@ class Controller(common.QuantumController):
             self._plugin.delete_port(tenant_id, network_id, id)
             return exc.HTTPNoContent()
         except exception.NetworkNotFound as e:
-            return faults.Fault(faults.NetworkNotFound(e))
+            return wsgi.Fault(faults.NetworkNotFound(e))
         except exception.PortNotFound as e:
-            return faults.Fault(faults.PortNotFound(e))
+            return wsgi.Fault(faults.PortNotFound(e))
         except exception.PortInUse as e:
-            return faults.Fault(faults.PortInUse(e))
+            return wsgi.Fault(faults.PortInUse(e))
+
+
+class ControllerV10(Controller):
+    
+    def __init__(self, plugin):
+        self.version = "1.0"
+        super(ControllerV10, self).__init__(plugin)
+
+
+class ControllerV11(Controller):
+    
+    def __init__(self, plugin):
+        self.version = "1.1"
+        super(ControllerV11, self).__init__(plugin)

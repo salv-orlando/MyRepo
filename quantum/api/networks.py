@@ -27,42 +27,14 @@ LOG = logging.getLogger('quantum.api.networks')
 
 
 def create_resource(plugin, version):
-    controller = {
-        '1.0': ControllerV10,
-        '1.1': ControllerV11,
-    }[version]()
-
-    metadata = {
-        '1.0': ControllerV10._serialization_metadata,
-        '1.1': ControllerV11._serialization_metadata,
-    }
-
-    xmlns = {
-        '1.0': common.XML_NS_V10,
-        '1.1': common.XML_NS_V11,
-    }[version]
-
-    headers_serializer = common.HeadersSerializer()
-    xml_serializer = wsgi.XMLDictSerializer(metadata, xmlns)
-    json_serializer = wsgi.JSONDictSerializer()
-    xml_deserializer = wsgi.XMLDeserializer(metadata)
-    json_deserializer = wsgi.JSONDeserializer()
-
-    body_serializers = {
-        'application/xml': xml_serializer,
-        'application/json': json_serializer,
-    }
-
-    body_deserializers = {
-        'application/xml': xml_deserializer,
-        'application/json': json_deserializer,
-    }
-
-    serializer = wsgi.ResponseSerializer(body_serializers, headers_serializer)
-    deserializer = wsgi.RequestDeserializer(body_deserializers)
-
-    return wsgi.Resource(controller, deserializer, serializer)
-    
+    controller_dict = {
+                        '1.0': [ControllerV10(plugin),
+                               ControllerV10._serialization_metadata,
+                               common.XML_NS_V10],
+                        '1.1': [ControllerV11(plugin),
+                                ControllerV11._serialization_metadata,
+                                common.XML_NS_V11]}
+    return common.create_resource(version, controller_dict)    
 
 class Controller(common.QuantumController):
     """ Network API controller for Quantum API """
@@ -115,7 +87,7 @@ class Controller(common.QuantumController):
             return self._item(request, tenant_id, id,
                               net_details=True, port_details=False)
         except exception.NetworkNotFound as e:
-            return faults.Fault(faults.NetworkNotFound(e))
+            return wsgi.Fault(faults.NetworkNotFound(e))
 
     def detail(self, request, **kwargs):
         tenant_id = kwargs.get('tenant_id')
@@ -128,37 +100,31 @@ class Controller(common.QuantumController):
             # show details for all networks
             return self._items(request, tenant_id, net_details=True)
 
-    def create(self, request, tenant_id):
+    def create(self, request, tenant_id, body):
         """ Creates a new network for a given tenant """
         #look for network name in request
-        try:
-            request_params = \
-                self._parse_request_params(request,
-                                           self._network_ops_param_list)
-        except exc.HTTPError as e:
-            return faults.Fault(e)
+        #try:
+        #    request_params = \
+        #        self._parse_request_params(request,
+        #                                   self._network_ops_param_list)
+        #except exc.HTTPError as e:
+        #    return wsgi.Fault(e)
         network = self._plugin.\
                    create_network(tenant_id,
-                                  request_params['name'])
+                                  body['name'])
         builder = networks_view.get_view_builder(request, self.version)
         result = builder.build(network)['network']
-        #TODO: must change this shit here
-        #return self._build_response(request, dict(network=result), 200)
+        return dict(network=result)
 
     def update(self, request, tenant_id, id):
         """ Updates the name for the network with the given id """
-        try:
-            request_params = \
-                self._parse_request_params(request,
-                                           self._network_ops_param_list)
-        except exc.HTTPError as e:
-            return faults.Fault(e)
-        try:
-            self._plugin.rename_network(tenant_id, id,
-                                        request_params['name'])
-            return exc.HTTPNoContent()
-        except exception.NetworkNotFound as e:
-            return faults.Fault(faults.NetworkNotFound(e))
+        #TODO: this thing does not exist anymore!
+        request_params = \
+            self._parse_request_params(request,
+                                       self._network_ops_param_list)
+        self._plugin.rename_network(tenant_id, id,
+                                    request_params['name'])
+        return exc.HTTPNoContent()
 
     def delete(self, request, tenant_id, id):
         """ Destroys the network with the given id """
@@ -166,9 +132,9 @@ class Controller(common.QuantumController):
             self._plugin.delete_network(tenant_id, id)
             return exc.HTTPNoContent()
         except exception.NetworkNotFound as e:
-            return faults.Fault(faults.NetworkNotFound(e))
+            return wsgi.Fault(faults.NetworkNotFound(e))
         except exception.NetworkInUse as e:
-            return faults.Fault(faults.NetworkInUse(e))
+            return wsgi.Fault(faults.NetworkInUse(e))
 
 
 class ControllerV10(Controller):

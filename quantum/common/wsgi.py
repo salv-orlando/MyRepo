@@ -121,8 +121,10 @@ class Request(webob.Request):
     def best_match_content_type(self):
         """Determine the most acceptable content-type.
 
-        Based on the query extension then the Accept header.
-
+        Based on:
+            1) URI extension (.json/.xml)
+            2) Content-type header
+            3) Accept* headers
         """
         # First lookup http request
         parts = self.path.rsplit('.', 1)
@@ -150,7 +152,6 @@ class Request(webob.Request):
         type = self.content_type
         if type in allowed_types:
             return type
-        LOG.debug(_("Wrong Content-Type: %s") % type)
         return None
 
 
@@ -353,6 +354,8 @@ class JSONDeserializer(TextDeserializer):
 
     def _from_json(self, datastring):
         try:
+            LOG.debug("datastring:%s", datastring)
+            LOG.debug("ciccio:%s", utils.loads(datastring))
             return utils.loads(datastring)
         except ValueError:
             msg = _("cannot understand JSON")
@@ -475,7 +478,7 @@ class RequestDeserializer(object):
 
     def deserialize_body(self, request, action):
         try:
-            content_type = request.get_content_type()
+            content_type = request.best_match_content_type()
         except exception.InvalidContentType:
             LOG.debug(_("Unrecognized Content-Type provided in request"))
             return {}
@@ -946,6 +949,7 @@ class Resource(Application):
 
         try:
             action, args, accept = self.deserializer.deserialize(request)
+            LOG.debug("Request:%s", request)
             LOG.debug("Action:%s", action)
             LOG.debug("Args:%s", args)
             LOG.debug("Accept:%s", accept)
@@ -1020,6 +1024,8 @@ class Fault(webob.exc.HTTPException):
         """Generate a WSGI response based on the exception passed to ctor."""
         # Replace the body with fault details.
         code = self.wrapped_exc.status_int
+        # have a status_int field for behaving as a standard HTTP response 
+        self.status_int = code
         fault_name = self._fault_names.get(code, "quantumServiceFault")
         fault_data = {
             fault_name: {

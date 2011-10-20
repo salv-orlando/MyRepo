@@ -21,8 +21,20 @@ from quantum.api import api_common as common
 from quantum.api import faults
 from quantum.api.views import attachments as attachments_view
 from quantum.common import exceptions as exception
+from quantum.common import wsgi
 
 LOG = logging.getLogger('quantum.api.ports')
+
+
+def create_resource(plugin, version):
+    controller_dict = {
+                        '1.0': [ControllerV10(plugin),
+                               ControllerV10._serialization_metadata,
+                               common.XML_NS_V10],
+                        '1.1': [ControllerV11(plugin),
+                                ControllerV11._serialization_metadata,
+                                common.XML_NS_V11]}
+    return common.create_resource(version, controller_dict)    
 
 
 class Controller(common.QuantumController):
@@ -51,9 +63,9 @@ class Controller(common.QuantumController):
             result = builder.build(att_data)['attachment']
             return dict(attachment=result)
         except exception.NetworkNotFound as e:
-            return faults.Fault(faults.NetworkNotFound(e))
+            return wsgi.Fault(faults.NetworkNotFound(e))
         except exception.PortNotFound as e:
-            return faults.Fault(faults.PortNotFound(e))
+            return wsgi.Fault(faults.PortNotFound(e))
 
     def attach_resource(self, request, tenant_id, network_id, id):
         try:
@@ -61,20 +73,20 @@ class Controller(common.QuantumController):
                 self._parse_request_params(request,
                                            self._attachment_ops_param_list)
         except exc.HTTPError as e:
-            return faults.Fault(e)
+            return wsgi.Fault(e)
         try:
             LOG.debug("PLUGGING INTERFACE:%s", request_params['id'])
             self._plugin.plug_interface(tenant_id, network_id, id,
                                         request_params['id'])
             return exc.HTTPNoContent()
         except exception.NetworkNotFound as e:
-            return faults.Fault(faults.NetworkNotFound(e))
+            return wsgi.Fault(faults.NetworkNotFound(e))
         except exception.PortNotFound as e:
-            return faults.Fault(faults.PortNotFound(e))
+            return wsgi.Fault(faults.PortNotFound(e))
         except exception.PortInUse as e:
-            return faults.Fault(faults.PortInUse(e))
+            return wsgi.Fault(faults.PortInUse(e))
         except exception.AlreadyAttached as e:
-            return faults.Fault(faults.AlreadyAttached(e))
+            return wsgi.Fault(faults.AlreadyAttached(e))
 
     def detach_resource(self, request, tenant_id, network_id, id):
         try:
@@ -82,6 +94,22 @@ class Controller(common.QuantumController):
                                           network_id, id)
             return exc.HTTPNoContent()
         except exception.NetworkNotFound as e:
-            return faults.Fault(faults.NetworkNotFound(e))
+            return wsgi.Fault(faults.NetworkNotFound(e))
         except exception.PortNotFound as e:
-            return faults.Fault(faults.PortNotFound(e))
+            return wsgi.Fault(faults.PortNotFound(e))
+        
+        
+
+
+class ControllerV10(Controller):
+    
+    def __init__(self, plugin):
+        self.version = "1.0"
+        super(ControllerV10, self).__init__(plugin)
+
+
+class ControllerV11(Controller):
+    
+    def __init__(self, plugin):
+        self.version = "1.1"
+        super(ControllerV11, self).__init__(plugin)

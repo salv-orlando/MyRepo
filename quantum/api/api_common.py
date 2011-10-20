@@ -45,6 +45,45 @@ class HeadersSerializer(wsgi.ResponseHeadersSerializer):
 
     def action(self, response, data):
         response.status_int = 202
+
+
+def create_resource(version, controller_dict):
+    """
+    Generic function for creating a wsgi resource
+    The function takes as input:
+     - desired version
+     - controller and metadata dictionary
+       e.g.: {'1.0': [ctrl_v10, meta_v10, xml_ns],
+              '1.1': [ctrl_v11, meta_v11, xml_ns]}
+     
+    """
+    # the first element of the iterable is expected to be the controller
+    controller = controller_dict[version][0]
+    # the second element should be the metadata
+    metadata = controller_dict[version][1]
+    # and the third element the xml namespace
+    xmlns = controller_dict[version][2]
+    
+    headers_serializer = HeadersSerializer()
+    xml_serializer = wsgi.XMLDictSerializer(metadata, xmlns)
+    json_serializer = wsgi.JSONDictSerializer()
+    xml_deserializer = wsgi.XMLDeserializer(metadata)
+    json_deserializer = wsgi.JSONDeserializer()
+
+    body_serializers = {
+        'application/xml': xml_serializer,
+        'application/json': json_serializer,
+    }
+
+    body_deserializers = {
+        'application/xml': xml_deserializer,
+        'application/json': json_deserializer,
+    }
+
+    serializer = wsgi.ResponseSerializer(body_serializers, headers_serializer)
+    deserializer = wsgi.RequestDeserializer(body_deserializers)
+
+    return wsgi.Resource(controller, deserializer, serializer)
         
         
 class QuantumController(wsgi.Controller):

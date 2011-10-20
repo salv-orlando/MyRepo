@@ -50,7 +50,7 @@ class APIRouter(wsgi.Router):
     def _mapper(self):
         return routes.Mapper()
 
-    def _setup_routes(self, mapper):
+    def _setup_routes(self, mapper, options):
         raise NotImplementedError(_("You must implement _setup_routes."))
 
     def _setup_base_routes(self, mapper, options, version):
@@ -98,6 +98,8 @@ class APIRouterV10(APIRouter):
     """
     API routes mappings for Quantum API v1.0
     """    
+    _version = '1.0'
     
-    #def _setup_routes(self, mapper, options):
-    pass
+    def _setup_routes(self, mapper, options):
+        self._setup_base_routes(mapper, options, self._version)
+

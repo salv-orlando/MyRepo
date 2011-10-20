@@ -33,9 +33,7 @@ from xml.dom import minidom
 from xml.parsers import expat
 
 from quantum import utils
-from quantum.api import faults
 from quantum.common import exceptions as exception
-
 
 
 LOG = logging.getLogger('quantum.common.wsgi')
@@ -954,17 +952,17 @@ class Resource(Application):
         except exception.InvalidContentType:
             msg = _("Unsupported Content-Type")
             LOG.exception("InvalidContentType:%s", msg)
-            return faults.Fault(webob.exc.HTTPBadRequest(explanation=msg))
+            return Fault(webob.exc.HTTPBadRequest(explanation=msg))
         except exception.MalformedRequestBody:
             msg = _("Malformed request body")
             LOG.exception("MalformedRequestBody:%s", msg)
-            return faults.Fault(webob.exc.HTTPBadRequest(explanation=msg))
+            return Fault(webob.exc.HTTPBadRequest(explanation=msg))
 
         try:
             action_result = self.dispatch(request, action, args)
         except webob.exc.HTTPException as ex:
             LOG.info(_("HTTP exception thrown: %s"), unicode(ex))
-            action_result = faults.Fault(ex)
+            action_result = Fault(ex)
 
         if type(action_result) is dict or action_result is None:
             response = self.serializer.serialize(action_result,
@@ -995,5 +993,45 @@ class Resource(Application):
             return controller_method(request=request, **action_args)
         except TypeError as exc:
             LOG.exception(exc)
-            return faults.Fault(webob.exc.HTTPBadRequest())
-    
+            return Fault(webob.exc.HTTPBadRequest())
+
+
+class Fault(webob.exc.HTTPException):
+    """Error codes for API faults"""
+
+    _fault_names = {
+            400: "malformedRequest",
+            401: "unauthorized",
+            420: "networkNotFound",
+            421: "networkInUse",
+            430: "portNotFound",
+            431: "requestedStateInvalid",
+            432: "portInUse",
+            440: "alreadyAttached",
+            470: "serviceUnavailable",
+            471: "pluginFault"}
+
+    def __init__(self, exception):
+        """Create a Fault for the given webob.exc.exception."""
+        self.wrapped_exc = exception
+
+    @webob.dec.wsgify(RequestClass=Request)
+    def __call__(self, req):
+        """Generate a WSGI response based on the exception passed to ctor."""
+        # Replace the body with fault details.
+        code = self.wrapped_exc.status_int
+        fault_name = self._fault_names.get(code, "quantumServiceFault")
+        fault_data = {
+            fault_name: {
+                'code': code,
+                'message': self.wrapped_exc.explanation,
+                'detail': str(self.wrapped_exc.detail)}}
+        # 'code' is an attribute on the fault tag itself
+        metadata = {'application/xml': {'attributes': {fault_name: 'code'}}}
+        #TODO(salvatore-orlando): Fault middleware should be version-aware
+        default_xmlns = "TODO"
+        serializer = Serializer(metadata, default_xmlns)
+        content_type = req.best_match_content_type()
+        self.wrapped_exc.body = serializer.serialize(fault_data, content_type)
+        self.wrapped_exc.content_type = content_type
+        return self.wrapped_exc

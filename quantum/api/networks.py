@@ -87,7 +87,7 @@ class Controller(common.QuantumController):
             return self._item(request, tenant_id, id,
                               net_details=True, port_details=False)
         except exception.NetworkNotFound as e:
-            return wsgi.Fault(faults.NetworkNotFound(e))
+            return faults.NetworkNotFound(e)
 
     def detail(self, request, **kwargs):
         tenant_id = kwargs.get('tenant_id')
@@ -102,6 +102,7 @@ class Controller(common.QuantumController):
 
     def create(self, request, tenant_id, body):
         """ Creates a new network for a given tenant """
+        #TODO: verify sanity of request body
         #look for network name in request
         #try:
         #    request_params = \
@@ -111,30 +112,28 @@ class Controller(common.QuantumController):
         #    return wsgi.Fault(e)
         network = self._plugin.\
                    create_network(tenant_id,
-                                  body['name'])
+                                  body['network']['name'])
         builder = networks_view.get_view_builder(request, self.version)
         result = builder.build(network)['network']
         return dict(network=result)
 
-    def update(self, request, tenant_id, id):
+    def update(self, request, tenant_id, id, body):
         """ Updates the name for the network with the given id """
         #TODO: this thing does not exist anymore!
-        request_params = \
-            self._parse_request_params(request,
-                                       self._network_ops_param_list)
-        self._plugin.rename_network(tenant_id, id,
-                                    request_params['name'])
-        return exc.HTTPNoContent()
+        #request_params = \
+        #     self._parse_request_params(request,
+        #                               self._network_ops_param_list)
+        self._plugin.rename_network(tenant_id, id, body['network']['name'])
 
     def delete(self, request, tenant_id, id):
         """ Destroys the network with the given id """
         try:
             self._plugin.delete_network(tenant_id, id)
-            return exc.HTTPNoContent()
+            # no need anymore for returning exc.HTTPNoContent()
         except exception.NetworkNotFound as e:
-            return wsgi.Fault(faults.NetworkNotFound(e))
+            return faults.NetworkNotFound(e)
         except exception.NetworkInUse as e:
-            return wsgi.Fault(faults.NetworkInUse(e))
+            return faults.NetworkInUse(e)
 
 
 class ControllerV10(Controller):

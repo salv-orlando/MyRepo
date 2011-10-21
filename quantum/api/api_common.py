@@ -27,26 +27,6 @@ XML_NS_V11 = 'http://netstack.org/quantum/api/v1.1'
 LOG = logging.getLogger('quantum.api.api_common')
 
 
-class HeadersSerializer(wsgi.ResponseHeadersSerializer):
-    """ 
-    Defines default respone status codes for Quantum API operations
-        create - 202 ACCEPTED
-        update - 204 NOCONTENT
-        delete - 204 NOCONTENT
-        others - 200 OK (defined in base class)
-        
-    """ 
-
-    def create(self, response, data):
-        response.status_int = 202
-
-    def delete(self, response, data):
-        response.status_int = 204
-
-    def action(self, response, data):
-        response.status_int = 202
-
-
 def create_resource(version, controller_dict):
     """
     Generic function for creating a wsgi resource
@@ -85,6 +65,26 @@ def create_resource(version, controller_dict):
 
     return wsgi.Resource(controller, deserializer, serializer)
         
+
+class HeadersSerializer(wsgi.ResponseHeadersSerializer):
+    """ 
+    Defines default respone status codes for Quantum API operations
+        create - 202 ACCEPTED
+        update - 204 NOCONTENT
+        delete - 204 NOCONTENT
+        others - 200 OK (defined in base class)
+        
+    """ 
+
+    def create(self, response, data):
+        response.status_int = 202
+
+    def delete(self, response, data):
+        response.status_int = 204
+
+    def action(self, response, data):
+        response.status_int = 202
+
         
 class QuantumController(wsgi.Controller):
     """ Base controller class for Quantum API """

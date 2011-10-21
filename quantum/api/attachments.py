@@ -63,40 +63,38 @@ class Controller(common.QuantumController):
             result = builder.build(att_data)['attachment']
             return dict(attachment=result)
         except exception.NetworkNotFound as e:
-            return wsgi.Fault(faults.NetworkNotFound(e))
+            return faults.NetworkNotFound(e)
         except exception.PortNotFound as e:
-            return wsgi.Fault(faults.PortNotFound(e))
+            return faults.PortNotFound(e)
 
-    def attach_resource(self, request, tenant_id, network_id, id):
+    def attach_resource(self, request, tenant_id, network_id, id, body):
+        #try:
+        #    request_params = \
+        #        self._parse_request_params(request,
+        #                                   self._attachment_ops_param_list)
+        #except exc.HTTPError as e:
+        #    return wsgi.Fault(e)
         try:
-            request_params = \
-                self._parse_request_params(request,
-                                           self._attachment_ops_param_list)
-        except exc.HTTPError as e:
-            return wsgi.Fault(e)
-        try:
-            LOG.debug("PLUGGING INTERFACE:%s", request_params['id'])
+            LOG.debug("PLUGGING INTERFACE:%s", body['attachment']['id'])
             self._plugin.plug_interface(tenant_id, network_id, id,
-                                        request_params['id'])
-            return exc.HTTPNoContent()
+                                        body['attachment']['id'])
         except exception.NetworkNotFound as e:
-            return wsgi.Fault(faults.NetworkNotFound(e))
+            return faults.NetworkNotFound(e)
         except exception.PortNotFound as e:
-            return wsgi.Fault(faults.PortNotFound(e))
+            return faults.PortNotFound(e)
         except exception.PortInUse as e:
-            return wsgi.Fault(faults.PortInUse(e))
+            return faults.PortInUse(e)
         except exception.AlreadyAttached as e:
-            return wsgi.Fault(faults.AlreadyAttached(e))
+            return faults.AlreadyAttached(e)
 
-    def detach_resource(self, request, tenant_id, network_id, id):
+    def detach_resource(self, request, tenant_id, network_id, id, body):
         try:
             self._plugin.unplug_interface(tenant_id,
                                           network_id, id)
-            return exc.HTTPNoContent()
         except exception.NetworkNotFound as e:
-            return wsgi.Fault(faults.NetworkNotFound(e))
+            return faults.NetworkNotFound(e)
         except exception.PortNotFound as e:
-            return wsgi.Fault(faults.PortNotFound(e))
+            return faults.PortNotFound(e)
         
         
 

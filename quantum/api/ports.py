@@ -76,7 +76,7 @@ class Controller(common.QuantumController):
                       for port in port_list]
             return dict(ports=result)
         except exception.NetworkNotFound as e:
-            return wsgi.Fault(faults.NetworkNotFound(e))
+            return faults.NetworkNotFound(e)
 
     def _item(self, request, tenant_id, network_id, port_id,
               att_details=False):
@@ -97,9 +97,9 @@ class Controller(common.QuantumController):
         try:
             return self._item(request, tenant_id, network_id, id)
         except exception.NetworkNotFound as e:
-            return wsgi.Fault(faults.NetworkNotFound(e))
+            return faults.NetworkNotFound(e)
         except exception.PortNotFound as e:
-            return wsgi.Fault(faults.PortNotFound(e))
+            return faults.PortNotFound(e)
 
     def detail(self, request, **kwargs):
         tenant_id = kwargs.get('tenant_id')
@@ -114,57 +114,56 @@ class Controller(common.QuantumController):
             return self._items(request, tenant_id,
                                network_id, port_details=True)
 
-    def create(self, request, tenant_id, network_id):
+    def create(self, request, tenant_id, network_id, body):
         """ Creates a new port for a given network """
+        #TODO: must check request sanity 
         #look for port state in request
-        try:
-            request_params = \
-                self._parse_request_params(request, self._port_ops_param_list)
-        except exc.HTTPError as e:
-            return wsgi.Fault(e)
+        #try:
+        #    request_params = \
+        #        self._parse_request_params(request, self._port_ops_param_list)
+        #except exc.HTTPError as e:
+        #    return wsgi.Fault(e)
         try:
             port = self._plugin.create_port(tenant_id,
-                                            network_id,
-                                            request_params['state'])
+                                            network_id, body['port']['state'])
             builder = ports_view.get_view_builder(request)
             result = builder.build(port)['port']
             return dict(network=result)
         except exception.NetworkNotFound as e:
-            return wsgi.Fault(faults.NetworkNotFound(e))
+            return faults.NetworkNotFound(e)
         except exception.StateInvalid as e:
-            return wsgi.Fault(faults.RequestedStateInvalid(e))
+            return faults.RequestedStateInvalid(e)
 
-    def update(self, request, tenant_id, network_id, id):
+    def update(self, request, tenant_id, network_id, id, body):
         """ Updates the state of a port for a given network """
+        #TODO: must check request body
         #look for port state in request
-        try:
-            request_params = \
-                self._parse_request_params(request, self._port_ops_param_list)
-        except exc.HTTPError as e:
-            return wsgi.Fault(e)
+        #try:
+        #    request_params = \
+        #        self._parse_request_params(request, self._port_ops_param_list)
+        #except exc.HTTPError as e:
+        #    return wsgi.Fault(e)
         try:
             self._plugin.update_port(tenant_id, network_id, id,
-                                     request_params['state'])
-            return exc.HTTPNoContent()
+                                     body['port']['state'])
         except exception.NetworkNotFound as e:
-            return wsgi.Fault(faults.NetworkNotFound(e))
+            return faults.NetworkNotFound(e)
         except exception.PortNotFound as e:
-            return wsgi.Fault(faults.PortNotFound(e))
+            return faults.PortNotFound(e)
         except exception.StateInvalid as e:
-            return wsgi.Fault(faults.RequestedStateInvalid(e))
+            return faults.RequestedStateInvalid(e)
 
     def delete(self, request, tenant_id, network_id, id):
         """ Destroys the port with the given id """
         #look for port state in request
         try:
             self._plugin.delete_port(tenant_id, network_id, id)
-            return exc.HTTPNoContent()
         except exception.NetworkNotFound as e:
-            return wsgi.Fault(faults.NetworkNotFound(e))
+            return faults.NetworkNotFound(e)
         except exception.PortNotFound as e:
-            return wsgi.Fault(faults.PortNotFound(e))
+            return faults.PortNotFound(e)
         except exception.PortInUse as e:
-            return wsgi.Fault(faults.PortInUse(e))
+            return faults.PortInUse(e)
 
 
 class ControllerV10(Controller):

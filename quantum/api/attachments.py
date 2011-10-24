@@ -34,7 +34,7 @@ def create_resource(plugin, version):
                         '1.1': [ControllerV11(plugin),
                                 ControllerV11._serialization_metadata,
                                 common.XML_NS_V11]}
-    return common.create_resource(version, controller_dict)    
+    return common.create_resource(version, controller_dict)
 
 
 class Controller(common.QuantumController):
@@ -87,7 +87,7 @@ class Controller(common.QuantumController):
         except exception.AlreadyAttached as e:
             return faults.AlreadyAttached(e)
 
-    def detach_resource(self, request, tenant_id, network_id, id, body):
+    def detach_resource(self, request, tenant_id, network_id, id):
         try:
             self._plugin.unplug_interface(tenant_id,
                                           network_id, id)
@@ -95,19 +95,17 @@ class Controller(common.QuantumController):
             return faults.NetworkNotFound(e)
         except exception.PortNotFound as e:
             return faults.PortNotFound(e)
-        
-        
 
 
 class ControllerV10(Controller):
-    
+
     def __init__(self, plugin):
         self.version = "1.0"
         super(ControllerV10, self).__init__(plugin)
 
 
 class ControllerV11(Controller):
-    
+
     def __init__(self, plugin):
         self.version = "1.1"
         super(ControllerV11, self).__init__(plugin)

@@ -34,7 +34,7 @@ def create_resource(plugin, version):
                         '1.1': [ControllerV11(plugin),
                                 ControllerV11._serialization_metadata,
                                 common.XML_NS_V11]}
-    return common.create_resource(version, controller_dict)    
+    return common.create_resource(version, controller_dict)
 
 
 class Controller(common.QuantumController):
@@ -46,11 +46,10 @@ class Controller(common.QuantumController):
         'required': False}, ]
 
     _serialization_metadata = {
-        "application/xml": {
             "attributes": {
                 "port": ["id", "state"],
                 "attachment": ["id"]},
-            "plurals": {"ports": "port"}},
+            "plurals": {"ports": "port"}
     }
 
     def __init__(self, plugin):
@@ -114,36 +113,30 @@ class Controller(common.QuantumController):
             return self._items(request, tenant_id,
                                network_id, port_details=True)
 
-    def create(self, request, tenant_id, network_id, body):
-        """ Creates a new port for a given network """
-        #TODO: must check request sanity 
-        #look for port state in request
-        #try:
-        #    request_params = \
-        #        self._parse_request_params(request, self._port_ops_param_list)
-        #except exc.HTTPError as e:
-        #    return wsgi.Fault(e)
+    def create(self, request, tenant_id, network_id, body=None):
+        """ Creates a new port for a given network
+            The request body is optional for a port object.
+
+        """
         try:
+            body = self._prepare_request_body(body, self._port_ops_param_list)
             port = self._plugin.create_port(tenant_id,
                                             network_id, body['port']['state'])
             builder = ports_view.get_view_builder(request)
             result = builder.build(port)['port']
-            return dict(network=result)
+            return dict(port=result)
         except exception.NetworkNotFound as e:
             return faults.NetworkNotFound(e)
         except exception.StateInvalid as e:
             return faults.RequestedStateInvalid(e)
+        except exc.HTTPError as e:
+            return e
 
     def update(self, request, tenant_id, network_id, id, body):
         """ Updates the state of a port for a given network """
-        #TODO: must check request body
-        #look for port state in request
-        #try:
-        #    request_params = \
-        #        self._parse_request_params(request, self._port_ops_param_list)
-        #except exc.HTTPError as e:
-        #    return wsgi.Fault(e)
+
         try:
+            body = self._prepare_request_body(body, self._port_ops_param_list)
             self._plugin.update_port(tenant_id, network_id, id,
                                      body['port']['state'])
         except exception.NetworkNotFound as e:
@@ -152,6 +145,8 @@ class Controller(common.QuantumController):
             return faults.PortNotFound(e)
         except exception.StateInvalid as e:
             return faults.RequestedStateInvalid(e)
+        except exc.HTTPError as e:
+            return e
 
     def delete(self, request, tenant_id, network_id, id):
         """ Destroys the port with the given id """
@@ -167,14 +162,14 @@ class Controller(common.QuantumController):
 
 
 class ControllerV10(Controller):
-    
+
     def __init__(self, plugin):
         self.version = "1.0"
         super(ControllerV10, self).__init__(plugin)
 
 
 class ControllerV11(Controller):
-    
+
     def __init__(self, plugin):
         self.version = "1.1"
         super(ControllerV11, self).__init__(plugin)

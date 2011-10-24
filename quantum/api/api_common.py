@@ -35,7 +35,7 @@ def create_resource(version, controller_dict):
      - controller and metadata dictionary
        e.g.: {'1.0': [ctrl_v10, meta_v10, xml_ns],
               '1.1': [ctrl_v11, meta_v11, xml_ns]}
-     
+
     """
     # the first element of the iterable is expected to be the controller
     controller = controller_dict[version][0]
@@ -43,7 +43,7 @@ def create_resource(version, controller_dict):
     metadata = controller_dict[version][1]
     # and the third element the xml namespace
     xmlns = controller_dict[version][2]
-    
+
     headers_serializer = HeadersSerializer()
     xml_serializer = wsgi.XMLDictSerializer(metadata, xmlns)
     json_serializer = wsgi.JSONDictSerializer()
@@ -64,17 +64,17 @@ def create_resource(version, controller_dict):
     deserializer = wsgi.RequestDeserializer(body_deserializers)
 
     return wsgi.Resource(controller, deserializer, serializer)
-        
+
 
 class HeadersSerializer(wsgi.ResponseHeadersSerializer):
-    """ 
+    """
     Defines default respone status codes for Quantum API operations
         create - 202 ACCEPTED
         update - 204 NOCONTENT
         delete - 204 NOCONTENT
         others - 200 OK (defined in base class)
-        
-    """ 
+
+    """
 
     def create(self, response, data):
         response.status_int = 202
@@ -82,13 +82,47 @@ class HeadersSerializer(wsgi.ResponseHeadersSerializer):
     def delete(self, response, data):
         response.status_int = 204
 
-    def action(self, response, data):
-        response.status_int = 202
+    def update(self, response, data):
+        response.status_int = 204
 
-        
+    def attach_resource(self, response, data):
+        response.status_int = 204
+
+    def detach_resource(self, response, data):
+        response.status_int = 204
+
+
 class QuantumController(wsgi.Controller):
     """ Base controller class for Quantum API """
 
     def __init__(self, plugin):
         self._plugin = plugin
         super(QuantumController, self).__init__()
+
+    def _prepare_request_body(self, body, params):
+        """ verifies required parameters are in request body.
+            sets default value for missing optional parameters.
+
+            body argument muste be the deserialized body
+        """
+        try:
+            if body is None:
+                # Initialize empty resource for setting default value
+                body = {self._resource_name: {}}
+            data = body[self._resource_name]
+        except KeyError:
+            # raise if _resource_name is not in req body.
+            raise exc.HTTPBadRequest("Unable to find '%s' in request body"\
+                                     % self._resource_name)
+        for param in params:
+            param_name = param['param-name']
+            param_value = data.get(param_name, None)
+            # If the parameter wasn't found and it was required, return 400
+            if param_value is None and param['required']:
+                msg = ("Failed to parse request. " +
+                       "Parameter: " + param_name + " not specified")
+                for line in msg.split('\n'):
+                    LOG.error(line)
+                raise exc.HTTPBadRequest(msg)
+            data[param_name] = param_value or param.get('default-value')
+        return body

@@ -129,6 +129,7 @@ class AlreadyAttachedClient(QuantumException):
 class MalformedRequestBody(QuantumException):
     message = _("Malformed request body: %(reason)s")
 
+
 class Duplicate(Error):
     pass
 

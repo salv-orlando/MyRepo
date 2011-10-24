@@ -16,7 +16,6 @@
 #    under the License.
 
 
-
 def get_view_builder(req, version):
     base_url = req.application_url
     view_builder = {
@@ -62,6 +61,7 @@ class ViewBuilder10(object):
         if port_data['attachment']:
             port_dict['attachment'] = dict(id=port_data['attachment'])
         return port_dict
+
 
 class ViewBuilder11(ViewBuilder10):
     #TODO(salvatore-orlando): will extend for Operational status

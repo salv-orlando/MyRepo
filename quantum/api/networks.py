@@ -34,19 +34,23 @@ def create_resource(plugin, version):
                         '1.1': [ControllerV11(plugin),
                                 ControllerV11._serialization_metadata,
                                 common.XML_NS_V11]}
-    return common.create_resource(version, controller_dict)    
+    return common.create_resource(version, controller_dict)
+
 
 class Controller(common.QuantumController):
     """ Network API controller for Quantum API """
 
+    _network_ops_param_list = [{
+        'param-name': 'name',
+        'required': True}, ]
+
     _serialization_metadata = {
-        "application/xml": {
             "attributes": {
                 "network": ["id", "name"],
                 "port": ["id", "state"],
                 "attachment": ["id"]},
             "plurals": {"networks": "network",
-                        "ports": "port"}},
+                        "ports": "port"}
     }
 
     def __init__(self, plugin):
@@ -102,14 +106,7 @@ class Controller(common.QuantumController):
 
     def create(self, request, tenant_id, body):
         """ Creates a new network for a given tenant """
-        #TODO: verify sanity of request body
-        #look for network name in request
-        #try:
-        #    request_params = \
-        #        self._parse_request_params(request,
-        #                                   self._network_ops_param_list)
-        #except exc.HTTPError as e:
-        #    return wsgi.Fault(e)
+        body = self._prepare_request_body(body, self._network_ops_param_list)
         network = self._plugin.\
                    create_network(tenant_id,
                                   body['network']['name'])
@@ -119,11 +116,11 @@ class Controller(common.QuantumController):
 
     def update(self, request, tenant_id, id, body):
         """ Updates the name for the network with the given id """
-        #TODO: this thing does not exist anymore!
-        #request_params = \
-        #     self._parse_request_params(request,
-        #                               self._network_ops_param_list)
-        self._plugin.rename_network(tenant_id, id, body['network']['name'])
+        body = self._prepare_request_body(body, self._network_ops_param_list)
+        try:
+            self._plugin.rename_network(tenant_id, id, body['network']['name'])
+        except exception.NetworkNotFound as e:
+            return faults.NetworkNotFound(e)
 
     def delete(self, request, tenant_id, id):
         """ Destroys the network with the given id """
@@ -137,13 +134,14 @@ class Controller(common.QuantumController):
 
 
 class ControllerV10(Controller):
-    
+
     def __init__(self, plugin):
         self.version = "1.0"
         super(ControllerV10, self).__init__(plugin)
 
+
 class ControllerV11(Controller):
-    
+
     def __init__(self, plugin):
         self.version = "1.1"
         super(ControllerV11, self).__init__(plugin)

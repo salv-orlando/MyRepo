@@ -377,7 +377,6 @@ class XMLDeserializer(TextDeserializer):
 
     def _from_xml(self, datastring):
         plurals = set(self.metadata.get('plurals', {}))
-
         try:
             node = minidom.parseString(datastring).childNodes[0]
             return {node.nodeName: self._from_xml_node(node, plurals)}
@@ -1018,15 +1017,13 @@ class Fault(webob.exc.HTTPException):
     def __init__(self, exception):
         """Create a Fault for the given webob.exc.exception."""
         self.wrapped_exc = exception
+        self.status_int = self.wrapped_exc.status_int
 
     @webob.dec.wsgify(RequestClass=Request)
     def __call__(self, req):
         """Generate a WSGI response based on the exception passed to ctor."""
         # Replace the body with fault details.
         code = self.wrapped_exc.status_int
-        # have a status_int field for behaving as a standard HTTP response
-        # TODO: this is wrong, too 
-        self.status_int = code
         fault_name = self._fault_names.get(code, "quantumServiceFault")
         fault_data = {
             fault_name: {

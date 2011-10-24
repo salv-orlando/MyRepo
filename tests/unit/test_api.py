@@ -76,8 +76,8 @@ class APITest(unittest.TestCase):
         port_res = port_req.get_response(self.api)
         self.assertEqual(port_res.status_int, expected_res_status)
         if expected_res_status in (200, 202):
-            port_data = self._port_deserializers[content_type].\
-                             deserialize(port_res.body)['body']
+            port_data = self._deserialize_port_response(content_type,
+                                                        port_res)
             LOG.debug("PORT RESPONSE:%s", port_res.body)
             LOG.debug("PORT DATA:%s", port_data)
             return port_data['port']['id']

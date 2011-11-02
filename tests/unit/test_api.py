@@ -22,8 +22,8 @@ import quantum.api.ports as ports
 import tests.unit._test_api as test_api
 
 
-class APITestV10(test_api.AbstractAPITest):
 
+class APITestV10(test_api.AbstractAPITest):
     def setUp(self):
         super(APITestV10, self).setUp('quantum.api.APIRouterV10',
              {test_api.NETS: nets.ControllerV10._serialization_metadata,

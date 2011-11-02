@@ -16,12 +16,12 @@
 #    under the License.
 
 import logging
-import webob
 
 from webob import exc
+
+from quantum.api import faults
 from quantum.common import wsgi
 
-XML_NS_V01 = 'http://netstack.org/quantum/api/v0.1'
 XML_NS_V10 = 'http://netstack.org/quantum/api/v1.0'
 XML_NS_V11 = 'http://netstack.org/quantum/api/v1.1'
 LOG = logging.getLogger('quantum.api.api_common')
@@ -66,6 +66,24 @@ def create_resource(version, controller_dict):
     return wsgi.Resource(controller, deserializer, serializer)
 
 
+def APIFaultWrapper(errors=None):
+
+    def wrapper(func, **kwargs):
+
+        def theFunc(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                if errors != None and type(e) in errors:
+                    raise faults.QuantumHTTPError(e)
+                # otherwise just re-raise
+                raise e
+        theFunc.__name__ = func.__name__
+        return theFunc
+
+    return wrapper
+
+
 class HeadersSerializer(wsgi.ResponseHeadersSerializer):
     """
     Defines default respone status codes for Quantum API operations
@@ -92,7 +110,7 @@ class HeadersSerializer(wsgi.ResponseHeadersSerializer):
         response.status_int = 204
 
 
-class QuantumController(wsgi.Controller):
+class QuantumController(object):
     """ Base controller class for Quantum API """
 
     def __init__(self, plugin):

@@ -72,6 +72,10 @@ def to_primitive(value):
         return o
     elif isinstance(value, datetime.datetime):
         return str(value)
+    elif isinstance(value, datetime.date):
+        return str(value)
+    elif isinstance(value, datetime.time):
+        return str(value)
     elif hasattr(value, 'iteritems'):
         return to_primitive(dict(value.iteritems()))
     elif hasattr(value, '__iter__'):

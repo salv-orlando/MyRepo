@@ -25,7 +25,6 @@ import webob.dec
 import webob.exc
 
 from quantum import manager
-from quantum.api import faults
 from quantum.api import attachments
 from quantum.api import networks
 from quantum.api import ports
@@ -99,6 +98,16 @@ class APIRouterV10(APIRouter):
     API routes mappings for Quantum API v1.0
     """
     _version = '1.0'
+
+    def _setup_routes(self, mapper, options):
+        self._setup_base_routes(mapper, options, self._version)
+
+
+class APIRouterV11(APIRouter):
+    """
+    API routes mappings for Quantum API v1.1
+    """
+    _version = '1.1'
 
     def _setup_routes(self, mapper, options):
         self._setup_base_routes(mapper, options, self._version)

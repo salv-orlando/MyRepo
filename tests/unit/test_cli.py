@@ -42,7 +42,8 @@ class CLITest(unittest.TestCase):
         """Prepare the test environment"""
         options = {}
         options['plugin_provider'] = 'quantum.plugins.SamplePlugin.FakePlugin'
-        self.api = server.APIRouterV10(options)
+        #TODO: make the version of the API router configurable
+        self.api = server.APIRouterV11(options)
 
         self.tenant_id = "test_tenant"
         self.network_name_1 = "test_network_1"

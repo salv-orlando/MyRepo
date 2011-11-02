@@ -15,13 +15,10 @@
 
 import logging
 
-from webob import exc
-
 from quantum.api import api_common as common
-from quantum.api import faults
 from quantum.api.views import attachments as attachments_view
 from quantum.common import exceptions as exception
-from quantum.common import wsgi
+
 
 LOG = logging.getLogger('quantum.api.ports')
 
@@ -55,49 +52,34 @@ class Controller(common.QuantumController):
         self._resource_name = 'attachment'
         super(Controller, self).__init__(plugin)
 
+    @common.APIFaultWrapper([exception.NetworkNotFound,
+                             exception.PortNotFound])
     def get_resource(self, request, tenant_id, network_id, id):
-        try:
-            att_data = self._plugin.get_port_details(
-                            tenant_id, network_id, id)
-            builder = attachments_view.get_view_builder(request)
-            result = builder.build(att_data)['attachment']
-            return dict(attachment=result)
-        except exception.NetworkNotFound as e:
-            return faults.NetworkNotFound(e)
-        except exception.PortNotFound as e:
-            return faults.PortNotFound(e)
+        att_data = self._plugin.get_port_details(
+                        tenant_id, network_id, id)
+        builder = attachments_view.get_view_builder(request)
+        result = builder.build(att_data)['attachment']
+        return dict(attachment=result)
 
+    @common.APIFaultWrapper([exception.NetworkNotFound,
+                             exception.PortNotFound,
+                             exception.PortInUse,
+                             exception.AlreadyAttached])
     def attach_resource(self, request, tenant_id, network_id, id, body):
-        #try:
-        #    request_params = \
-        #        self._parse_request_params(request,
-        #                                   self._attachment_ops_param_list)
-        #except exc.HTTPError as e:
-        #    return wsgi.Fault(e)
-        try:
-            LOG.debug("PLUGGING INTERFACE:%s", body['attachment']['id'])
-            self._plugin.plug_interface(tenant_id, network_id, id,
-                                        body['attachment']['id'])
-        except exception.NetworkNotFound as e:
-            return faults.NetworkNotFound(e)
-        except exception.PortNotFound as e:
-            return faults.PortNotFound(e)
-        except exception.PortInUse as e:
-            return faults.PortInUse(e)
-        except exception.AlreadyAttached as e:
-            return faults.AlreadyAttached(e)
+        body = self._prepare_request_body(body,
+                                          self._attachment_ops_param_list)
+        self._plugin.plug_interface(tenant_id, network_id, id,
+                                    body['attachment']['id'])
 
+    @common.APIFaultWrapper([exception.NetworkNotFound,
+                             exception.PortNotFound])
     def detach_resource(self, request, tenant_id, network_id, id):
-        try:
-            self._plugin.unplug_interface(tenant_id,
-                                          network_id, id)
-        except exception.NetworkNotFound as e:
-            return faults.NetworkNotFound(e)
-        except exception.PortNotFound as e:
-            return faults.PortNotFound(e)
+        self._plugin.unplug_interface(tenant_id,
+                                      network_id, id)
 
 
 class ControllerV10(Controller):
+    """Attachment resources controller for Quantum v1.0 API"""
 
     def __init__(self, plugin):
         self.version = "1.0"
@@ -105,6 +87,7 @@ class ControllerV10(Controller):
 
 
 class ControllerV11(Controller):
+    """Attachment resources controller for Quantum v1.1 API"""
 
     def __init__(self, plugin):
         self.version = "1.1"

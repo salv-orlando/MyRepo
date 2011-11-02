@@ -59,8 +59,9 @@ def run_server(application, port):
 class Server(object):
     """Server class to manage multiple WSGI sockets and applications."""
 
-    def __init__(self, threads=1000):
+    def __init__(self, name, threads=1000):
         self.pool = eventlet.GreenPool(threads)
+        self.name = name
 
     def start(self, application, port, host='0.0.0.0', backlog=128):
         """Run a WSGI server with the given application."""
@@ -128,7 +129,6 @@ class Request(webob.Request):
         """
         # First lookup http request
         parts = self.path.rsplit('.', 1)
-        LOG.debug("Request parts:%s", parts)
         if len(parts) > 1:
             format = parts[1]
             if format in ['json', 'xml']:
@@ -354,8 +354,6 @@ class JSONDeserializer(TextDeserializer):
 
     def _from_json(self, datastring):
         try:
-            LOG.debug("datastring:%s", datastring)
-            LOG.debug("ciccio:%s", utils.loads(datastring))
             return utils.loads(datastring)
         except ValueError:
             msg = _("cannot understand JSON")
@@ -692,6 +690,131 @@ class Router(object):
         return app
 
 
+class Resource(Application):
+    """WSGI app that handles (de)serialization and controller dispatch.
+
+    WSGI app that reads routing information supplied by RoutesMiddleware
+    and calls the requested action method upon its controller.  All
+    controller action methods must accept a 'req' argument, which is the
+    incoming wsgi.Request. If the operation is a PUT or POST, the controller
+    method must also accept a 'body' argument (the deserialized request body).
+    They may raise a webob.exc exception or return a dict, which will be
+    serialized by requested content type.
+
+    """
+
+    def __init__(self, controller, deserializer=None, serializer=None):
+        """
+        :param controller: object that implement methods created by routes lib
+        :param deserializer: object that can serialize the output of a
+                             controller into a webob response
+        :param serializer: object that can deserialize a webob request
+                           into necessary pieces
+
+        """
+        self.controller = controller
+        self.deserializer = deserializer or RequestDeserializer()
+        self.serializer = serializer or ResponseSerializer()
+        # use serializer's xmlns for populating Fault generator xmlns
+        xml_serializer = self.serializer.body_serializers['application/xml']
+        if hasattr(xml_serializer, 'xmlns'):
+            self._xmlns = xml_serializer.xmlns
+
+    @webob.dec.wsgify(RequestClass=Request)
+    def __call__(self, request):
+        """WSGI method that controls (de)serialization and method dispatch."""
+
+        LOG.info("%(method)s %(url)s" % {"method": request.method,
+                                          "url": request.url})
+
+        try:
+            action, args, accept = self.deserializer.deserialize(request)
+        except exception.InvalidContentType:
+            msg = _("Unsupported Content-Type")
+            LOG.exception("InvalidContentType:%s", msg)
+            return Fault(webob.exc.HTTPBadRequest(explanation=msg),
+                         self._xmlns)
+        except exception.MalformedRequestBody:
+            msg = _("Malformed request body")
+            LOG.exception("MalformedRequestBody:%s", msg)
+            return Fault(webob.exc.HTTPBadRequest(explanation=msg),
+                         self._xmlns)
+
+        try:
+            action_result = self.dispatch(request, action, args)
+        except webob.exc.HTTPException as ex:
+            LOG.info(_("HTTP exception thrown: %s"), unicode(ex))
+            action_result = Fault(ex, self._xmlns)
+
+        if type(action_result) is dict or action_result is None:
+            response = self.serializer.serialize(action_result,
+                                                 accept,
+                                                 action=action)
+        else:
+            response = action_result
+
+        try:
+            msg_dict = dict(url=request.url, status=response.status_int)
+            msg = _("%(url)s returned with HTTP %(status)d") % msg_dict
+        except AttributeError, e:
+            msg_dict = dict(url=request.url, e=e)
+            msg = _("%(url)s returned a fault: %(e)s" % msg_dict)
+
+        LOG.info(msg)
+
+        return response
+
+    def dispatch(self, request, action, action_args):
+        """Find action-spefic method on controller and call it."""
+
+        controller_method = getattr(self.controller, action)
+        try:
+            #NOTE(salvatore-orlando): the controller method must have
+            # an argument whose name is 'request'
+            return controller_method(request=request, **action_args)
+        except TypeError as exc:
+            LOG.exception(exc)
+            return Fault(webob.exc.HTTPBadRequest(),
+                         self._xmlns)
+
+
+class Fault(webob.exc.HTTPException):
+    """ Generates an HTTP response from a webob HTTP exception"""
+
+    def __init__(self, exception, xmlns=None):
+        """Creates a Fault for the given webob.exc.exception."""
+        self.wrapped_exc = exception
+        self.status_int = self.wrapped_exc.status_int
+        self._xmlns = xmlns
+
+    @webob.dec.wsgify(RequestClass=Request)
+    def __call__(self, req):
+        """Generate a WSGI response based on the exception passed to ctor."""
+        # Replace the body with fault details.
+        code = self.wrapped_exc.status_int
+        fault_name = hasattr(self.wrapped_exc, 'title') and \
+                     self.wrapped_exc.title or "quantumServiceFault"
+        fault_data = {
+            fault_name: {
+                'code': code,
+                'message': self.wrapped_exc.explanation,
+                'detail': str(self.wrapped_exc.detail)}}
+        # 'code' is an attribute on the fault tag itself
+        metadata = {'application/xml': {'attributes': {fault_name: 'code'}}}
+        xml_serializer = XMLDictSerializer(metadata, self._xmlns)
+        content_type = req.best_match_content_type()
+        serializer = {
+            'application/xml': xml_serializer,
+            'application/json': JSONDictSerializer(),
+        }[content_type]
+
+        self.wrapped_exc.body = serializer.serialize(fault_data)
+        self.wrapped_exc.content_type = content_type
+        return self.wrapped_exc
+
+
+# NOTE(salvatore-orlando): this class will go once the
+# extension API framework is updated
 class Controller(object):
     """WSGI app that dispatched to methods.
 
@@ -764,6 +887,8 @@ class Controller(object):
         return None
 
 
+# NOTE(salvatore-orlando): this class will go once the
+# extension API framework is updated
 class Serializer(object):
     """Serializes and deserializes dictionaries to certain MIME types."""
 
@@ -911,131 +1036,3 @@ class Serializer(object):
             node = doc.createTextNode(str(data))
             result.appendChild(node)
         return result
-
-
-class Resource(Application):
-    """WSGI app that handles (de)serialization and controller dispatch.
-
-    WSGI app that reads routing information supplied by RoutesMiddleware
-    and calls the requested action method upon its controller.  All
-    controller action methods must accept a 'req' argument, which is the
-    incoming wsgi.Request. If the operation is a PUT or POST, the controller
-    method must also accept a 'body' argument (the deserialized request body).
-    They may raise a webob.exc exception or return a dict, which will be
-    serialized by requested content type.
-
-    """
-
-    def __init__(self, controller, deserializer=None, serializer=None):
-        """
-        :param controller: object that implement methods created by routes lib
-        :param deserializer: object that can serialize the output of a
-                             controller into a webob response
-        :param serializer: object that can deserialize a webob request
-                           into necessary pieces
-
-        """
-        self.controller = controller
-        self.deserializer = deserializer or RequestDeserializer()
-        self.serializer = serializer or ResponseSerializer()
-
-    @webob.dec.wsgify(RequestClass=Request)
-    def __call__(self, request):
-        """WSGI method that controls (de)serialization and method dispatch."""
-
-        LOG.info("%(method)s %(url)s" % {"method": request.method,
-                                          "url": request.url})
-
-        try:
-            action, args, accept = self.deserializer.deserialize(request)
-            LOG.debug("Request:%s", request)
-            LOG.debug("Action:%s", action)
-            LOG.debug("Args:%s", args)
-            LOG.debug("Accept:%s", accept)
-        except exception.InvalidContentType:
-            msg = _("Unsupported Content-Type")
-            LOG.exception("InvalidContentType:%s", msg)
-            return Fault(webob.exc.HTTPBadRequest(explanation=msg))
-        except exception.MalformedRequestBody:
-            msg = _("Malformed request body")
-            LOG.exception("MalformedRequestBody:%s", msg)
-            return Fault(webob.exc.HTTPBadRequest(explanation=msg))
-
-        try:
-            action_result = self.dispatch(request, action, args)
-        except webob.exc.HTTPException as ex:
-            LOG.info(_("HTTP exception thrown: %s"), unicode(ex))
-            action_result = Fault(ex)
-
-        if type(action_result) is dict or action_result is None:
-            response = self.serializer.serialize(action_result,
-                                                 accept,
-                                                 action=action)
-        else:
-            response = action_result
-
-        try:
-            msg_dict = dict(url=request.url, status=response.status_int)
-            msg = _("%(url)s returned with HTTP %(status)d") % msg_dict
-        except AttributeError, e:
-            msg_dict = dict(url=request.url, e=e)
-            msg = _("%(url)s returned a fault: %(e)s" % msg_dict)
-
-        LOG.info(msg)
-
-        return response
-
-    def dispatch(self, request, action, action_args):
-        """Find action-spefic method on controller and call it."""
-
-        controller_method = getattr(self.controller, action)
-        try:
-            #NOTE(salvatore-orlando): the controller method must have
-            # an argument whose name is 'request'
-            LOG.debug("Action args:%s", action_args)
-            return controller_method(request=request, **action_args)
-        except TypeError as exc:
-            LOG.exception(exc)
-            return Fault(webob.exc.HTTPBadRequest())
-
-
-class Fault(webob.exc.HTTPException):
-    """Error codes for API faults"""
-
-    _fault_names = {
-            400: "malformedRequest",
-            401: "unauthorized",
-            420: "networkNotFound",
-            421: "networkInUse",
-            430: "portNotFound",
-            431: "requestedStateInvalid",
-            432: "portInUse",
-            440: "alreadyAttached",
-            470: "serviceUnavailable",
-            471: "pluginFault"}
-
-    def __init__(self, exception):
-        """Create a Fault for the given webob.exc.exception."""
-        self.wrapped_exc = exception
-        self.status_int = self.wrapped_exc.status_int
-
-    @webob.dec.wsgify(RequestClass=Request)
-    def __call__(self, req):
-        """Generate a WSGI response based on the exception passed to ctor."""
-        # Replace the body with fault details.
-        code = self.wrapped_exc.status_int
-        fault_name = self._fault_names.get(code, "quantumServiceFault")
-        fault_data = {
-            fault_name: {
-                'code': code,
-                'message': self.wrapped_exc.explanation,
-                'detail': str(self.wrapped_exc.detail)}}
-        # 'code' is an attribute on the fault tag itself
-        metadata = {'application/xml': {'attributes': {fault_name: 'code'}}}
-        #TODO(salvatore-orlando): Fault middleware should be version-aware
-        default_xmlns = "TODO"
-        serializer = Serializer(metadata, default_xmlns)
-        content_type = req.best_match_content_type()
-        self.wrapped_exc.body = serializer.serialize(fault_data, content_type)
-        self.wrapped_exc.content_type = content_type
-        return self.wrapped_exc

@@ -44,15 +44,6 @@ class Controller(common.QuantumController):
         'param-name': 'name',
         'required': True}, ]
 
-    _serialization_metadata = {
-            "attributes": {
-                "network": ["id", "name"],
-                "port": ["id", "state"],
-                "attachment": ["id"]},
-            "plurals": {"networks": "network",
-                        "ports": "port"}
-    }
-
     def __init__(self, plugin):
         self._resource_name = 'network'
         super(Controller, self).__init__(plugin)
@@ -81,18 +72,21 @@ class Controller(common.QuantumController):
                   for network in networks]
         return dict(networks=result)
 
+    @common.APIFaultWrapper()
     def index(self, request, tenant_id):
         """ Returns a list of network ids """
         return self._items(request, tenant_id)
 
+    @common.APIFaultWrapper()
     def show(self, request, tenant_id, id):
         """ Returns network details for the given network id """
         try:
             return self._item(request, tenant_id, id,
                               net_details=True, port_details=False)
         except exception.NetworkNotFound as e:
-            return faults.NetworkNotFound(e)
+            raise faults.QuantumHTTPError(e)
 
+    @common.APIFaultWrapper()
     def detail(self, request, **kwargs):
         tenant_id = kwargs.get('tenant_id')
         network_id = kwargs.get('id')
@@ -104,6 +98,7 @@ class Controller(common.QuantumController):
             # show details for all networks
             return self._items(request, tenant_id, net_details=True)
 
+    @common.APIFaultWrapper()
     def create(self, request, tenant_id, body):
         """ Creates a new network for a given tenant """
         body = self._prepare_request_body(body, self._network_ops_param_list)
@@ -114,26 +109,30 @@ class Controller(common.QuantumController):
         result = builder.build(network)['network']
         return dict(network=result)
 
+    @common.APIFaultWrapper([exception.NetworkNotFound])
     def update(self, request, tenant_id, id, body):
         """ Updates the name for the network with the given id """
         body = self._prepare_request_body(body, self._network_ops_param_list)
-        try:
-            self._plugin.rename_network(tenant_id, id, body['network']['name'])
-        except exception.NetworkNotFound as e:
-            return faults.NetworkNotFound(e)
+        self._plugin.rename_network(tenant_id, id, body['network']['name'])
 
+    @common.APIFaultWrapper([exception.NetworkNotFound,
+                             exception.NetworkInUse])
     def delete(self, request, tenant_id, id):
         """ Destroys the network with the given id """
-        try:
-            self._plugin.delete_network(tenant_id, id)
-            # no need anymore for returning exc.HTTPNoContent()
-        except exception.NetworkNotFound as e:
-            return faults.NetworkNotFound(e)
-        except exception.NetworkInUse as e:
-            return faults.NetworkInUse(e)
+        self._plugin.delete_network(tenant_id, id)
 
 
 class ControllerV10(Controller):
+    """Network resources controller for Quantum v1.0 API"""
+
+    _serialization_metadata = {
+            "attributes": {
+                "network": ["id", "name"],
+                "port": ["id", "state"],
+                "attachment": ["id"]},
+            "plurals": {"networks": "network",
+                        "ports": "port"}
+    }
 
     def __init__(self, plugin):
         self.version = "1.0"
@@ -141,6 +140,16 @@ class ControllerV10(Controller):
 
 
 class ControllerV11(Controller):
+    """Network resources controller for Quantum v1.1 API"""
+
+    _serialization_metadata = {
+            "attributes": {
+                "network": ["id", "name"],
+                "port": ["id", "state"],
+                "attachment": ["id"]},
+            "plurals": {"networks": "network",
+                        "ports": "port"}
+    }
 
     def __init__(self, plugin):
         self.version = "1.1"

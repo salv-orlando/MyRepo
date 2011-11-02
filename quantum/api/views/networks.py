@@ -64,5 +64,6 @@ class ViewBuilder10(object):
 
 
 class ViewBuilder11(ViewBuilder10):
-    #TODO(salvatore-orlando): will be extended for dealing with op. status
+    #TODO(salvatore-orlando): will extend for Operational status
+    # in appropriate branch
     pass

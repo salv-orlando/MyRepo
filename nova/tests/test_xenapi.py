@@ -198,6 +198,7 @@ class XenAPIVMTestCase(test.TestCase):
         stubs.stub_out_vm_methods(self.stubs)
         glance_stubs.stubout_glance_client(self.stubs)
         fake_utils.stub_out_utils_execute(self.stubs)
+        stubs.stub_os_path_isfile(self.stubs)
         self.user_id = 'fake'
         self.project_id = 'fake'
         self.context = context.RequestContext(self.user_id, self.project_id)
@@ -502,7 +503,7 @@ class XenAPIVMTestCase(test.TestCase):
 
         self._tee_executed = False
 
-        def _tee_handler(cmd, **kwargs):
+        def _tee_handler_interfaces(cmd, **kwargs):
             input = kwargs.get('process_input', None)
             self.assertNotEqual(input, None)
             config = [line.strip() for line in input.split("\n")]
@@ -516,23 +517,31 @@ class XenAPIVMTestCase(test.TestCase):
                 'gateway 192.168.0.1',
                 'dns-nameservers 192.168.0.1',
                 ''])
-            self._tee_executed = True
+            self._tee_interfaces_executed = True
             return '', ''
 
-        def _which_resolvconf_handler(cmd, **kwargs):
-            # simulate resolvconf not found in PATH
-            return '1', ''
+        def _tee_handler_resolv_conf(cmd, **kwargs):
+            input = kwargs.get('process_input', None)
+            self.assertNotEqual(input, None)
+            config = [line.strip() for line in input.split("\n")]
+            # output should be single line with nameserver
+            self.assertEquals(config, 
+                              ['nameserver 192.168.0.1', ''])
+            self._tee_resolv_conf_executed = True
+            return '', ''
 
         fake_utils.fake_execute_set_repliers([
             # Capture the tee .../etc/network/interfaces command
-            (r'tee.*interfaces', _tee_handler),
-            (r'which.*resolvconf', _which_resolvconf_handler),
+            (r'tee.*interfaces', _tee_handler_interfaces),
+            (r'tee.*resolv.*', _tee_handler_resolv_conf)
         ])
+        
         self._test_spawn(glance_stubs.FakeGlance.IMAGE_MACHINE,
                          glance_stubs.FakeGlance.IMAGE_KERNEL,
                          glance_stubs.FakeGlance.IMAGE_RAMDISK,
                          check_injection=True)
-        self.assertTrue(self._tee_executed)
+        self.assertTrue(self._tee_interfaces_executed)
+        self.assertTrue(self._tee_resolv_conf_executed)
 
     def test_spawn_netinject_xenstore(self):
         db_fakes.stub_out_db_instance_api(self.stubs, injected=True)
@@ -755,6 +764,23 @@ class XenAPIMigrateInstance(test.TestCase):
         stubs.stub_out_migration_methods(self.stubs)
         stubs.stubout_get_this_vm_uuid(self.stubs)
         glance_stubs.stubout_glance_client(self.stubs)
+
+    def test_resize_xenserver_6(self):
+        instance = db.instance_create(self.context, self.values)
+        called = {'resize': False}
+
+        def fake_vdi_resize(*args, **kwargs):
+            called['resize'] = True
+
+        self.stubs.Set(stubs.FakeSessionForMigrationTests,
+                       "VDI_resize", fake_vdi_resize)
+        stubs.stubout_session(self.stubs,
+                              stubs.FakeSessionForMigrationTests,
+                              product_version=(6, 0, 0))
+        stubs.stubout_loopingcall_start(self.stubs)
+        conn = xenapi_conn.get_connection(False)
+        conn._vmops.resize_instance(instance, '')
+        self.assertEqual(called['resize'], True)
 
     def test_migrate_disk_and_power_off(self):
         instance = db.instance_create(self.context, self.values)

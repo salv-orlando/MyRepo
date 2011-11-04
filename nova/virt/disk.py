@@ -315,9 +315,10 @@ def _inject_dns_into_fs(dns, fs, execute=None):
     is performed only if the instance does not loads them
     automatically through resolvconf.
     """
-    result = utils.execute('which', 'resolvconf')
-    if result[0] != '0':
-        dnsfile = os.path.join((os.path.join(fs, 'etc'), 'resolv.conf'))
+    resolvconf_filename = os.path.join(os.path.join(fs, 'sbin'), 'resolvconf')
+    
+    if not os.path.isfile(resolvconf_filename):
+        dnsfile = os.path.join(os.path.join(fs, 'etc'), 'resolv.conf')
         utils.execute('chown', 'root:root', dnsfile, run_as_root=True)
         utils.execute('chmod', 755, dnsfile, run_as_root=True)
         utils.execute('tee', dnsfile, process_input=dns, run_as_root=True)

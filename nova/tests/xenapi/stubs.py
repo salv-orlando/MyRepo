@@ -18,7 +18,9 @@
 
 import eventlet
 import json
+import os
 import random
+import re
 
 from nova.virt import xenapi_conn
 from nova.virt.xenapi import fake
@@ -57,8 +59,8 @@ def stubout_instance_snapshot(stubs):
     stubs.Set(vm_utils, 'wait_for_vhd_coalesce', fake_wait_for_vhd_coalesce)
 
 
-def stubout_session(stubs, cls):
-    """Stubs out two methods from XenAPISession"""
+def stubout_session(stubs, cls, product_version=None):
+    """Stubs out three methods from XenAPISession"""
     def fake_import(self):
         """Stubs out get_imported_xenapi of XenAPISession"""
         fake_module = 'nova.virt.xenapi.fake'
@@ -69,6 +71,10 @@ def stubout_session(stubs, cls):
                        lambda s, url: cls(url))
     stubs.Set(xenapi_conn.XenAPISession, 'get_imported_xenapi',
                        fake_import)
+    if product_version is None:
+        product_version = (5, 6, 2)
+    stubs.Set(xenapi_conn.XenAPISession, 'get_product_version',
+            lambda s: product_version)
 
 
 def stub_out_get_target(stubs):
@@ -107,6 +113,23 @@ def stubout_determine_is_pv_objectstore(stubs):
     def f(cls, *args):
         return False
     stubs.Set(vm_utils.VMHelper, '_determine_is_pv_objectstore', f)
+    
+    
+def stub_os_path_isfile(stubs):
+    """ This stub ensures we always injection in /etc/resolv.conf """
+    
+    def fake_isfile(path):
+
+        if re.match(r'.*resolvconf', path):
+            return False
+        # retrieve original
+        for item in stubs.cache:
+            if item[2] == 'isfile':
+                return item[1](path)  
+        return True
+    
+    stubs.Set(os.path, 'isfile', fake_isfile)
+
 
 
 def stubout_lookup_image(stubs):

@@ -80,6 +80,11 @@ class VMOps(object):
         self._session = session
         self.poll_rescue_last_ran = None
         VMHelper.XenAPI = self.XenAPI
+        LOG.debug("Firewall driver:%s", FLAGS.firewall_driver)
+        fw_class = utils.import_class(FLAGS.firewall_driver)
+        LOG.debug("HERE-1")
+        self.firewall_driver = fw_class(xenapi_session=self._session)
+        LOG.debug("HERE-2")
         self.vif_driver = utils.import_object(FLAGS.xenapi_vif_driver)
 
     def list_instances(self):
@@ -150,9 +155,48 @@ class VMOps(object):
     def spawn(self, context, instance, network_info):
         vdis = None
         try:
-            vdis = self._create_disks(context, instance)
-            vm_ref = self._create_vm(context, instance, vdis, network_info)
+            # 1. Vanity Step
+            # NOTE(sirp): _create_disk will potentially take a *very* long
+            # time to complete since it has to fetch the image over the
+            # network and images can be several gigs in size. To avoid
+            # progress remaining at 0% for too long, which will appear to be
+            # an error, we insert a "vanity" step to bump the progress up one
+            # notch above 0.
+            self._update_instance_progress(context, instance,
+                                           step=1,
+                                           total_steps=BUILD_TOTAL_STEPS)
+
+            # 2. Fetch the Image over the Network
+            vdis = self._create_disks(context, instance, image_meta)
+            self._update_instance_progress(context, instance,
+                                           step=2,
+                                           total_steps=BUILD_TOTAL_STEPS)
+
+            # 3. Create the VM records
+            vm_ref = self._create_vm(context, instance, vdis, network_info,
+                                     image_meta)
+            self._update_instance_progress(context, instance,
+                                           step=3,
+                                           total_steps=BUILD_TOTAL_STEPS)
+            # 4. Prepare security group filters
+            # NOTE(salvatore-orlando): setup_basic_filtering might be empty or
+            # not implemented at all, as basic filter could be implemented
+            # with VIF rules created by xapi plugin
+            try:
+                self.firewall_driver.setup_basic_filtering(
+                        instance, network_info)
+            except NotImplementedError:
+                pass
+            self.firewall_driver.prepare_instance_filter(instance,
+                                                         network_info)
+
+            # 5. Boot the Instance
             self._spawn(instance, vm_ref)
+            # The VM has started, let's ensure the security groups are enforced
+            self.firewall_driver.apply_instance_filter(instance, network_info)
+            self._update_instance_progress(context, instance,
+                                           step=4,
+                                           total_steps=BUILD_TOTAL_STEPS)
         except (self.XenAPI.Failure, OSError, IOError) as spawn_error:
             LOG.exception(_("instance %s: Failed to spawn"),
                           instance.id, exc_info=sys.exc_info())
@@ -306,7 +350,6 @@ class VMOps(object):
         instance_name = instance.name
         LOG.info(_('Spawning VM %(instance_name)s created %(vm_ref)s.')
                  % locals())
-
         ctx = nova_context.get_admin_context()
         agent_build = db.agent_build_get_by_triple(ctx, 'xen',
                               instance.os_type, instance.architecture)
@@ -622,12 +665,21 @@ class VMOps(object):
                         " GB") % locals())
             vdi_ref = self._session.call_xenapi('VDI.get_by_uuid', vdi_uuid)
             # for an instance with no local storage
-            self._session.call_xenapi('VDI.resize_online', vdi_ref,
+            # FIXME
+            LOG.debug("PRODUCT VERSION:%s", self._product_version)
+            if self._product_version[0] > 5:
+                resize_func_name = 'VDI.resize'
+            else:
+                resize_func_name = 'VDI.resize_online'
+            self._session.call_xenapi(resize_func_name, vdi_ref,
                     str(new_disk_size))
             LOG.debug(_("Resize instance %s complete") % (instance.name))
 
     def reboot(self, instance):
         """Reboot VM instance."""
+        # Note (salvatore-orlando): security group rules are not re-enforced
+        # upon reboot, since this action on the XenAPI drivers does not
+        # remove existing filters
         vm_ref = self._get_vm_opaque_ref(instance)
         task = self._session.call_xenapi('Async.VM.clean_reboot', vm_ref)
         self._session.wait_for_task(task, instance.id)
@@ -913,11 +965,15 @@ class VMOps(object):
         self._destroy_vdis(instance, vm_ref)
         if destroy_kernel_ramdisk:
             self._destroy_kernel_ramdisk(instance, vm_ref)
+
         self._destroy_vm(instance, vm_ref)
 
         if network_info:
             for (network, mapping) in network_info:
                 self.vif_driver.unplug(instance, network, mapping)
+        # Remove security groups filters for instance
+        self.firewall_driver.unfilter_instance(instance,
+                                               network_info=network_info)
 
     def _wait_with_callback(self, instance_id, task, callback):
         ret = None
@@ -1377,6 +1433,19 @@ class VMOps(object):
     def clear_param_xenstore(self, instance_or_vm):
         """Removes all data from the xenstore parameter record for this VM."""
         self.write_to_param_xenstore(instance_or_vm, {})
+
+    def refresh_security_group_rules(self, security_group_id):
+        """ recreates security group rules for every instance """
+        self.firewall_driver.refresh_security_group_rules(security_group_id)
+
+    def refresh_security_group_members(self, security_group_id):
+        """ recreates security group rules for every instance """
+        self.firewall_driver.refresh_security_group_members(security_group_id)
+
+    def unfilter_instance(self, instance_ref, network_info):
+        """Removes filters for each VIF of the specified instance."""
+        self.firewall_driver.unfilter_instance(instance_ref,
+                                               network_info=network_info)
     ########################################################################
 
 

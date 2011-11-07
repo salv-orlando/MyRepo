@@ -313,6 +313,7 @@ class IptablesManager(object):
                 self.execute('%s-restore' % (cmd,), run_as_root=True,
                              process_input='\n'.join(new_filter),
                              attempts=5)
+        LOG.debug("IPTablesManager.Apply completed with succeess")
 
     def _modify_rules(self, current_lines, table, binary=None):
         unwrapped_chains = table.unwrapped_chains

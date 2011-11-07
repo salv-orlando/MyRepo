@@ -70,7 +70,7 @@ from nova.compute import power_state
 from nova.virt import disk
 from nova.virt import driver
 from nova.virt import images
-from nova.virt.libvirt import netutils
+from nova.virt import netutils
 
 
 libvirt = None
@@ -98,18 +98,12 @@ flags.DEFINE_string('libvirt_uri',
                     '',
                     'Override the default libvirt URI (which is dependent'
                     ' on libvirt_type)')
-flags.DEFINE_bool('allow_same_net_traffic',
-                  True,
-                  'Whether to allow network traffic from same network')
 flags.DEFINE_bool('use_cow_images',
                   True,
                   'Whether to use cow images')
 flags.DEFINE_string('ajaxterm_portrange',
                     '10000-12000',
                     'Range of ports that ajaxterm should randomly try to bind')
-flags.DEFINE_string('firewall_driver',
-                    'nova.virt.libvirt.firewall.IptablesFirewallDriver',
-                    'Firewall driver (defaults to iptables)')
 flags.DEFINE_string('cpuinfo_xml_template',
                     utils.abspath('virt/cpuinfo.xml.template'),
                     'CpuInfo XML Template (Used only live migration now)')

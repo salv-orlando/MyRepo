@@ -1316,7 +1316,6 @@ class IptablesFirewallTestCase(test.TestCase):
         self.stubs.Set(db, 'instance_get_fixed_addresses', get_fixed_ips)
         self.fw.prepare_instance_filter(instance_ref, network_info)
         self.fw.apply_instance_filter(instance_ref, network_info)
-
         in_rules = filter(lambda l: not l.startswith('#'),
                           self.in_filter_rules)
         for rule in in_rules:

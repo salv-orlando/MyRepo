@@ -559,7 +559,7 @@ class IptablesFirewallDriver(base_firewall.IptablesFirewallDriver):
             args += ['-j DROP']
             fw_rules += [' '.join(args)]
         return ipv4_rules, ipv6_rules
-    
+
     def unfilter_instance(self, instance, network_info):
         if self.instances.pop(instance['id'], None):
             # NOTE(vish): use the passed info instead of the stored info

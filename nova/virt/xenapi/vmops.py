@@ -167,9 +167,9 @@ class VMOps(object):
                 pass
             self.firewall_driver.prepare_instance_filter(instance,
                                                          network_info)
-            
+
             self._spawn(instance, vm_ref)
-            
+
             self.firewall_driver.apply_instance_filter(instance, network_info)
         except (self.XenAPI.Failure, OSError, IOError) as spawn_error:
             LOG.exception(_("instance %s: Failed to spawn"),
@@ -638,14 +638,7 @@ class VMOps(object):
                         "%(instance_name)s. Expanding to %(instance_local_gb)d"
                         " GB") % locals())
             vdi_ref = self._session.call_xenapi('VDI.get_by_uuid', vdi_uuid)
-            # NOTE(salvatore-orlando): The following check is not part 
-            # of stable/diablo. Still, quite useful for running nova on XS Boston
-            LOG.debug("PRODUCT VERSION:%s", self._product_version)
-            if self._product_version[0] > 5:
-                resize_func_name = 'VDI.resize'
-            else:
-                resize_func_name = 'VDI.resize_online'
-            self._session.call_xenapi(resize_func_name, vdi_ref,
+            self._session.call_xenapi('VDI.resize_online', vdi_ref,
                     str(new_disk_size))
             LOG.debug(_("Resize instance %s complete") % (instance.name))
 

@@ -665,7 +665,7 @@ class XenAPIVMTestCase(test.TestCase):
     def _create_instance(self, instance_id=1, spawn=True):
         """Creates and spawns a test instance."""
         stubs.stubout_loopingcall_start(self.stubs)
-        values = {
+        instance_values = {
             'id': instance_id,
             'project_id': self.project_id,
             'user_id': self.user_id,
@@ -1070,6 +1070,7 @@ class HostStateTestCase(test.TestCase):
         self.assertEquals(stats['host_memory_overhead'], 20)
         self.assertEquals(stats['host_memory_free'], 30)
         self.assertEquals(stats['host_memory_free_computed'], 40)
+
 
 class XenAPIDom0IptablesFirewallTestCase(test.TestCase):
 

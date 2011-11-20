@@ -26,6 +26,7 @@ from nova import log as logging
 from nova import utils
 from nova.virt import driver
 from nova.virt import fake
+from nova.virt import firewall
 from nova.virt import hyperv
 from nova.virt import vmwareapi_conn
 from nova.virt import xenapi_conn

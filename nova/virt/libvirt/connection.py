@@ -1014,8 +1014,10 @@ class LibvirtConnection(driver.ComputeDriver):
                     LOG.info(_('instance %(inst_name)s: injecting '
                                '%(injection)s into image %(img_id)s'
                                % locals()))
+                #TODO: salvatore-orlando: prepare DNS injection here
             try:
-                disk.inject_data(injection_path, key, net, metadata,
+                disk.inject_data(injection_path, key, net, 
+                                 metata=metadata,
                                  partition=target_partition,
                                  nbd=FLAGS.use_cow_images,
                                  tune2fs=tune2fs)

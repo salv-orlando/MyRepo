@@ -518,10 +518,15 @@ class XenAPIVMTestCase(test.TestCase):
                 ''])
             self._tee_executed = True
             return '', ''
+        
+        def _which_resolvconf_handler(cmd, **kwargs):
+            # simulate resolvconf not found in PATH
+            return '1', ''
 
         fake_utils.fake_execute_set_repliers([
             # Capture the tee .../etc/network/interfaces command
             (r'tee.*interfaces', _tee_handler),
+            (r'which.*resolvconf', _which_resolvconf_handler),
         ])
         self._test_spawn(glance_stubs.FakeGlance.IMAGE_MACHINE,
                          glance_stubs.FakeGlance.IMAGE_KERNEL,

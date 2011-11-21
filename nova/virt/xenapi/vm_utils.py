@@ -1233,10 +1233,11 @@ def _prepare_injectables(inst, networks_info):
     from Cheetah import Template as t
     template = t.Template
     template_data = open(FLAGS.injected_network_template).read()
-
+    dns_template_data = open(FLAGS.injected_dns_template).read()
     metadata = inst['metadata']
     key = str(inst['key_data'])
     net = None
+    dns = None
     if networks_info:
         ifc_num = -1
         interfaces_info = []
@@ -1253,15 +1254,15 @@ def _prepare_injectables(inst, networks_info):
             if 'ip6s' in info and len(info['ip6s']) > 0:
                 ip_v6 = info['ip6s'][0]
             if len(info['dns']) > 0:
-                dns = info['dns'][0]
+                dns_ip = info['dns'][0]
             else:
-                dns = ''
+                dns_ip = ''
             interface_info = {'name': 'eth%d' % ifc_num,
                               'address': ip_v4 and ip_v4['ip'] or '',
                               'netmask': ip_v4 and ip_v4['netmask'] or '',
                               'gateway': info['gateway'],
                               'broadcast': info['broadcast'],
-                              'dns': dns,
+                              'dns': dns_ip,
                               'address_v6': ip_v6 and ip_v6['ip'] or '',
                               'netmask_v6': ip_v6 and ip_v6['netmask'] or '',
                               'gateway_v6': ip_v6 and info['gateway6'] or '',
@@ -1272,4 +1273,7 @@ def _prepare_injectables(inst, networks_info):
             net = str(template(template_data,
                                 searchList=[{'interfaces': interfaces_info,
                                             'use_ipv6': FLAGS.use_ipv6}]))
-    return key, net, None, metadata
+            dns = str(template(dns_template_data,
+                                searchList=[{'interfaces': interfaces_info}]))
+
+    return key, net, dns, metadata

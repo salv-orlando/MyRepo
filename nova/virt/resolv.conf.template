@@ -1,0 +1,3 @@
+#for $ifc in $interfaces
+nameserver ${ifc.dns}
+#end for

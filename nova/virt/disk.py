@@ -47,6 +47,9 @@ flags.DEFINE_integer('block_size', 1024 * 1024 * 256,
 flags.DEFINE_string('injected_network_template',
                     utils.abspath('virt/interfaces.template'),
                     'Template file for injected network')
+flags.DEFINE_string('injected_dns_template',
+                    utils.abspath('virt/resolv.conf.template'),
+                    'Template file for injected dns info')
 flags.DEFINE_integer('timeout_nbd', 10,
                      'time to wait for a NBD device coming up')
 flags.DEFINE_integer('max_nbd_devices', 16,
@@ -264,7 +267,7 @@ def inject_data_into_fs(fs, key, net, dns, metadata, execute):
     if net:
         _inject_net_into_fs(net, fs, execute=execute)
     if dns:
-        pass
+        _inject_dns_into_fs(dns, fs, execute=execute)
     if metadata:
         _inject_metadata_into_fs(metadata, fs, execute=execute)
 
@@ -303,8 +306,18 @@ def _inject_net_into_fs(net, fs, execute=None):
     utils.execute('chmod', 755, netdir, run_as_root=True)
     netfile = os.path.join(netdir, 'interfaces')
     utils.execute('tee', netfile, process_input=net, run_as_root=True)
+
+
+def _inject_dns_into_fs(dns, fs, execute=None):
+    """Inject /etc/resolv.conf into the filesystem rooted at fs.
+
+    dns is the contents of such file. Injection of /etc/resolv,conf
+    is performed only if the instance does not loads them
+    automatically through resolvconf.
+    """
     result = utils.execute('which', 'resolvconf')
-    if result !=0:
-        # no resolvconf package, dns info must be
-        # injected into /etc/resolv.conf
-        pass
+    if result[0] != '0':
+        dnsfile = os.path.join((os.path.join(fs, 'etc'), 'resolv.conf'))
+        utils.execute('chown', 'root:root', dnsfile, run_as_root=True)
+        utils.execute('chmod', 755, dnsfile, run_as_root=True)
+        utils.execute('tee', dnsfile, process_input=dns, run_as_root=True)

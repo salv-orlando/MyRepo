@@ -518,7 +518,7 @@ class XenAPIVMTestCase(test.TestCase):
                 ''])
             self._tee_executed = True
             return '', ''
-        
+
         def _which_resolvconf_handler(cmd, **kwargs):
             # simulate resolvconf not found in PATH
             return '1', ''

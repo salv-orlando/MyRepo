@@ -31,7 +31,7 @@ class QuantumPluginBase(object):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def get_all_networks(self, tenant_id):
+    def get_all_networks(self, tenant_id, **kwargs):
         """
         Returns a dictionary containing all
         <network_uuid, network_name> for
@@ -119,7 +119,7 @@ class QuantumPluginBase(object):
         pass
 
     @abstractmethod
-    def get_all_ports(self, tenant_id, net_id):
+    def get_all_ports(self, tenant_id, net_id, **kwargs):
         """
         Retrieves all port identifiers belonging to the
         specified Virtual Network.
@@ -229,6 +229,20 @@ class QuantumPluginBase(object):
         :raises: exception.PortNotFound
         """
         pass
+
+    def can_filter_networks(self):
+        """ 
+        returns True if the plugin is able to perform filtering
+        on network resources, False otherwise
+        """
+        return False
+    
+    def can_filter_ports(self):
+        """ 
+        returns True if the plugin is able to perform filtering
+        on port resources, False otherwise
+        """
+        return False
 
     @classmethod
     def __subclasshook__(cls, klass):

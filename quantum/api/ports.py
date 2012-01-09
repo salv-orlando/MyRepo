@@ -16,6 +16,7 @@
 import logging
 
 from quantum.api import api_common as common
+from quantum.api.views import filters
 from quantum.api.views import ports as ports_view
 from quantum.common import exceptions as exception
 
@@ -49,7 +50,11 @@ class Controller(common.QuantumController):
     def _items(self, request, tenant_id, network_id,
                port_details=False):
         """ Returns a list of ports. """
-        port_list = self._plugin.get_all_ports(tenant_id, network_id)
+        filter_opts = {}
+        filter_opts.update(request.str_GET)        
+        port_list = self._plugin.get_all_ports(tenant_id, network_id,
+                                               filter_opts=filter_opts)
+
         builder = ports_view.get_view_builder(request, self.version)
 
         # Load extra data for ports if required.
@@ -60,10 +65,23 @@ class Controller(common.QuantumController):
                   for port in port_list]
             port_list = port_list_detail
 
+        # Perform manual filtering if not supported by plugin
+        if len(filter_opts) > 0 and \
+           not self._plugin_can_filter_ports():
+            # Inefficient, API-layer filtering
+            port_list = filters.filter_ports(port_list, self._plugin,
+                                             tenant_id, network_id,
+                                             filter_opts)
+
         result = [builder.build(port, port_details)['port']
                   for port in port_list]
         return dict(ports=result)
 
+    def _plugin_can_filter_ports(self):
+        if not hasattr(self._plugin, 'can_filter_ports'):
+            return False
+        return self._plugin.can_filter_ports()
+    
     def _item(self, request, tenant_id, network_id, port_id,
               att_details=False):
         """ Returns a specific port. """
